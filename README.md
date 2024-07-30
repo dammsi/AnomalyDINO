@@ -1,4 +1,4 @@
-# AnomalyDINO: Boosting Patch-based Few-shot Anomaly Detection with DINOv2 <img align="right" src="media/AnomalyDINO.png" alt="AnomalyDINO" style="height: 84px; max-width: 100%;">
+# AnomalyDINO: Boosting Patch-based Few-shot Anomaly Detection with DINOv2 <img align="right" src="media/AnomalyDINO.png" style="height: 84px; max-width: 100%;">
 
 *Simon Damm, Mike Laszkiewicz, Johannes Lederer, Asja Fischer*
 
