@@ -1,20 +1,8 @@
-# AnomalyDINO: Boosting Patch-based Few-shot Anomaly Detection with DINOv2
-
-<!-- 
-This is the official code to reproduce the experiments in the paper [AnomalyDINO: Boosting Patch-based Few-shot Anomaly Detection with DINOv2](https://arxiv.org/abs/2405.14529). -->
-
-<div style="display: flex;">
-  <div style="flex: 8; padding-right: 20px;">
+# AnomalyDINO: Boosting Patch-based Few-shot Anomaly Detection with DINOv2 <img align="right" src="media/AnomalyDINO.png" alt="AnomalyDINO" style="height: 84px; max-width: 100%;">
 
 *Simon Damm, Mike Laszkiewicz, Johannes Lederer, Asja Fischer*
 
 This is the official code to reproduce the experiments in the paper [AnomalyDINO: Boosting Patch-based Few-shot Anomaly Detection with DINOv2](https://arxiv.org/abs/2405.14529).
-
-</div>
-<div style="flex: 1;">
-<img src="media/AnomalyDINO_transparent.png" alt="AnomalyDINO" style="height: 64px; max-width: 100%;">
-</div>
-</div>
 
 ## Prerequisits
 
@@ -31,11 +19,11 @@ Please adapt the function calls below if necessary.
 ## Usage
 
 ### Short Demo
-Test the minimal demo to perform few-shot anomaly detection (`demo_AD_DINO.ipynb`).
+Get started with the minimal demo to perform few-shot anomaly detection (`demo_AD_DINO.ipynb`).
 
 ### Few-shot anomaly detection
 
-Run the script `run_anomalydino.py` on the selected dataset for a given number of shots and repetitions (seeds).
+To run the full evaluation run the script `run_anomalydino.py` on the selected dataset for a given number of shots and repetitions (seeds).
 The preprocessing to your dataset can be specified in `src/utils.py` in `get_dataset_info`, default is "agnostic" (apply masking whenever PCA-based masking works well & augment reference samples by rotations).
 
 The results for the default setting, i.e., all considered shots, three repetitions, and agnostic preprocessing, can be reproduced by calling:
