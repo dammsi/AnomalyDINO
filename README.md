@@ -74,7 +74,7 @@ python run_anomalydino_batched.py --dataset VisA --data_root data/VisA_pytorch/1
 
 ---
 
-This wrk builds upon the following ressources:
+This work builds on the following ressources:
 - [DINOv2](https://github.com/facebookresearch/dinov2), code and model available under Apache 2.0 license.
 - The [MVTec-AD dataset](https://www.mvtec.com/company/research/datasets/mvtec-ad), available under the CC BY-NC-SA 4.0 license.
 - The [VisA dataset](https://github.com/amazon-science/spot-diff), available under the CC BY 4.0 license.
