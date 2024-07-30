@@ -3,7 +3,7 @@
 <!-- 
 This is the official code to reproduce the experiments in the paper [AnomalyDINO: Boosting Patch-based Few-shot Anomaly Detection with DINOv2](https://arxiv.org/abs/2405.14529). -->
 
-<div style="display: flex; flex-wrap: wrap;">
+<div style="display: flex;">
   <div style="flex: 8; padding-right: 20px;">
 
 *Simon Damm, Mike Laszkiewicz, Johannes Lederer, Asja Fischer*
@@ -12,7 +12,7 @@ This is the official code to reproduce the experiments in the paper [AnomalyDINO
 
 </div>
 <div style="flex: 1;">
-<img src="media/AnomalyDINO_transparent.png" alt="AnomalyDINO" style="height: 64px; max-width: 100%; height: auto;">
+<img src="media/AnomalyDINO_transparent.png" alt="AnomalyDINO" style="height: 64px; max-width: 100%;">
 </div>
 </div>
 
