@@ -6,15 +6,33 @@ This is the official code to reproduce the experiments in the paper [AnomalyDINO
 
 ## Prerequisits
 
-1. Download and prepare the datasets [MVTec-AD](https://www.mvtec.com/company/research/datasets/mvtec-ad) and [VisA](https://github.com/amazon-science/spot-diff) from their official sources. 
-For VisA, follow the instruction in the official repo to organize the data in the official 1-class splits. 
-The default folder are `data/mvtec_anomaly_detection` for MVTec-AD, and `data/VisA_pytorch/1cls/` for VisA. 
-Please adapt the function calls below if necessary. 
-
-2. Create a virtual environment (e.g., `python -m venv .venvAnomalyDINO`), activate it ( `source .venvAnomalyDINO/bin/activate`) and install the required dependencies for AnomalyDINO:
+1. Create a virtual environment (e.g., `python -m venv .venvAnomalyDINO`), activate it ( `source .venvAnomalyDINO/bin/activate`) and install the required dependencies for AnomalyDINO:
     ```shell
     pip install -r requirements.txt
     ```
+
+2. Download and prepare the datasets [MVTec-AD](https://www.mvtec.com/company/research/datasets/mvtec-ad) and [VisA](https://github.com/amazon-science/spot-diff) from their official sources.
+For VisA, follow the instruction in the official repo to organize the data in the official 1-class splits. 
+The default folder are `data/mvtec_anomaly_detection` for MVTec-AD, and `data/VisA_pytorch/1cls/` for VisA. 
+Please adapt the function calls below if necessary. 
+Alternatively, prepare your own dataset accordingly:
+    ```
+    your_data_root
+    ├── object1
+    │   ├── ground_truth        # anomaly annotaions per anomaly type
+    │   │   ├── anomaly_type1
+    │   │   ├── ...
+    │   ├── test                # test images per anomaly type & 'good'
+    │   │   ├── anomaly_type1    
+    │   │   ├── ...
+    │   │   └── good
+    │   └── train               # train/reference images (without anomalies)
+    │       └── good
+    ├── object2
+    │   ├──
+    │   ...
+    ```
+
 
 ## Usage
 
@@ -55,4 +73,26 @@ python run_anomalydino_batched.py --dataset MVTec --data_root data/mvtec_anomaly
 ```
 ```shell
 python run_anomalydino_batched.py --dataset VisA --data_root data/VisA_pytorch/1cls/
+```
+
+---
+
+This repo 
+- [DINOv2](https://github.com/facebookresearch/dinov2), code and model available under Apache 2.0 license.
+- The [MVTec-AD dataset](https://www.mvtec.com/company/research/datasets/mvtec-ad), available under the CC BY-NC-SA 4.0 license.
+- The [VisA dataset](https://github.com/amazon-science/spot-diff), available under the CC BY 4.0 license.
+
+---
+
+
+If you find this repository useful in your research, please consider citing our paper
+
+```
+@misc{damm2024anomalydino,
+      title={AnomalyDINO: Boosting Patch-based Few-shot Anomaly Detection with DINOv2}, 
+      author={Simon Damm and Mike Laszkiewicz and Johannes Lederer and Asja Fischer},
+      year={2024},
+      eprint={2405.14529},
+      url={https://arxiv.org/abs/2405.14529}, 
+}
 ```
