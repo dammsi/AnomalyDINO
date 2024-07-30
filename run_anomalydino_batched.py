@@ -124,7 +124,6 @@ def evaluate_ad_batched(dm,
 
             # plot anomaly map
             vmax = np.max(y_scores[y_true == 0]) * 1.2
-            # print(vmax)
             fig, axes = plt.subplots(len(type_anomalies), 5, figsize=(10, 2*len(type_anomalies)))
             for i, sample_idx in enumerate(sample_indices):
                 ax = axes[i//5, i%5]

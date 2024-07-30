@@ -1,6 +1,6 @@
-""""
-This evaluation scripts partly builds on the official evaluation script for MVTec-AD (original code available here: https://www.mvtec.com/company/research/datasets/mvtec-ad).
-"""
+# This evaluation scripts partly builds on the official evaluation script for MVTec-AD,
+# original code available here: https://www.mvtec.com/company/research/datasets/mvtec-ad
+
 
 import json
 from sklearn.metrics import auc, roc_auc_score, average_precision_score, f1_score, precision_recall_curve, pairwise
