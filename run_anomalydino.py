@@ -1,3 +1,4 @@
+import argparse
 import os
 import time
 from argparse import ArgumentParser, Action 
@@ -36,14 +37,14 @@ def parse_args():
     parser.add_argument("--resolution", type=int, default=448)
     parser.add_argument("--knn_metric", type=str, default="L2_normalized")
     parser.add_argument("--k_neighbors", type=int, default=1)
-    parser.add_argument("--shots", nargs='+', type=int, default=[1], #action=IntListAction, 
+    parser.add_argument("--faiss_on_cpu", default=False, action=argparse.BooleanOptionalAction, help="Use GPU for FAISS kNN search. (Conda install faiss-gpu recommended, does usually not work with pip install.)")
+    parser.add_argument("--shots", nargs='+', type=int, default=[1], #action=IntListAction,
                         help="List of shots to evaluate. Full-shot scenario is -1.")
     parser.add_argument("--num_seeds", type=int, default=1)
     parser.add_argument("--just_seed", type=int, default=None)
-    parser.add_argument("--save_examples", type=bool, default=True, help="Save example plots.")
-    parser.add_argument("--save_anomaly_map", default=False, help="Save anomaly map as tiff image (might consume some disk space).")
-    parser.add_argument("--eval_clf", type=bool, default=True) 
-    parser.add_argument("--eval_segm", type=bool, default=False)
+    parser.add_argument('--save_examples', default=True, action=argparse.BooleanOptionalAction, help="Save example plots.")
+    parser.add_argument("--eval_clf", default=True, action=argparse.BooleanOptionalAction, help="Evaluate anomaly detection performance.")
+    parser.add_argument("--eval_segm", default=False, action=argparse.BooleanOptionalAction, help="Evaluate anomaly segmentation performance.")
     parser.add_argument("--device", default='cuda:0')
     parser.add_argument("--warmup_iters", type=int, default=25, help="Number of warmup iterations, relevant when benchmarking inference time.")
 
@@ -90,6 +91,9 @@ if __name__=="__main__":
         # save arguments to file
         with open(f"{results_dir}/args.yaml", "w") as f:
             yaml.dump(vars(args), f)
+
+        if args.faiss_on_cpu:
+            print("Warning: Running similarity search on CPU. Consider using faiss-gpu for faster inference.")
         
         print("Results will be saved to", results_dir)
     
@@ -126,11 +130,13 @@ if __name__=="__main__":
                                                                                 save_examples = save_examples,
                                                                                 knn_metric = args.knn_metric,
                                                                                 knn_neighbors = args.k_neighbors,
+                                                                                faiss_on_cpu = args.faiss_on_cpu,
                                                                                 masking = masking_default[object_name],
                                                                                 rotation = rotation_default[object_name],
                                                                                 seed = seed,
                                                                                 save_patch_dists = args.eval_clf, # save patch distances for detection evaluation
                                                                                 save_tiffs = args.eval_segm)      # save anomaly maps as tiffs for segmentation evaluation
+                        
                         # write anomaly scores and inference times to file
                         for counter, sample in enumerate(anomaly_scores.keys()):
                             anomaly_score = anomaly_scores[sample]

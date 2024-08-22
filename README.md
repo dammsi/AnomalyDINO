@@ -10,7 +10,7 @@ This is the official code to reproduce the experiments in the paper [AnomalyDINO
     ```shell
     pip install -r requirements.txt
     ```
-    Info: If you want to use `faiss` with GPU-acceleration we recommend setting up a conda environment with the required packages instead (only conda installation is supported, see, e.g., [here](https://github.com/facebookresearch/faiss/wiki/Installing-Faiss#why-dont-you-support-installing-via-xxx-)).
+    Info: If you want to use `faiss` with GPU-acceleration we recommend setting up a conda environment with the required packages instead (only conda installation is supported, see, e.g., [here](https://github.com/facebookresearch/faiss/wiki/Installing-Faiss#why-dont-you-support-installing-via-xxx-)). To perform similarity search on CPU set the additional flag `--faiss_on_cpu`.
 
 2. Download and prepare the datasets [MVTec-AD](https://www.mvtec.com/company/research/datasets/mvtec-ad) and [VisA](https://github.com/amazon-science/spot-diff) from their official sources.
 For VisA, follow the instruction in the official repo to organize the data in the official 1-class splits. 
@@ -20,7 +20,7 @@ Alternatively, prepare your own dataset accordingly:
     ```
     your_data_root
     ├── object1
-    │   ├── ground_truth        # anomaly annotaions per anomaly type
+    │   ├── ground_truth        # anomaly annotations per anomaly type
     │   │   ├── anomaly_type1
     │   │   ├── ...
     │   ├── test                # test images per anomaly type & 'good'
@@ -58,7 +58,7 @@ For a faster inspection use, e.g.,
 python run_anomalydino.py --dataset MVTec --shots 1 --num_seeds 1 --preprocess informed --data_root data/mvtec_anomaly_detection
 ```
 
-The script automatically creates some example plots, plots some anomaly maps for each object, and automatically evaluates each run (activate evaluation of segementation with `--eval_segm True` if applicable). 
+The script automatically creates some example plots, plots some anomaly maps for each object, and automatically evaluates each run (activate evaluation of segementation with `--eval_segm` if applicable).
 
 Evaluation results are saved in the respective results directory as `metrics_seed={seed}.json` for each seed.
 
@@ -75,7 +75,7 @@ python run_anomalydino_batched.py --dataset VisA --data_root data/VisA_pytorch/1
 
 ---
 
-This work builds on the following ressources:
+This work uses the following ressources and datasets:
 - [DINOv2](https://github.com/facebookresearch/dinov2), code and model available under Apache 2.0 license.
 - The [MVTec-AD dataset](https://www.mvtec.com/company/research/datasets/mvtec-ad), available under the CC BY-NC-SA 4.0 license.
 - The [VisA dataset](https://github.com/amazon-science/spot-diff), available under the CC BY 4.0 license.

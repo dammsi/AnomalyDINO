@@ -24,6 +24,7 @@ def run_anomaly_detection(
         rotation = False,
         knn_metric = 'L2_normalized',
         knn_neighbors = 1,
+        faiss_on_cpu = False,
         seed = 0,
         save_patch_dists = True,
         save_tiffs = False):
@@ -102,12 +103,18 @@ def run_anomaly_detection(
         
         features_ref = np.concatenate(features_ref, axis=0).astype('float32')
 
-        # set up the KNN index (on GPU)
-        res = faiss.StandardGpuResources()
-        gpu_index = faiss.GpuIndexFlatL2(res, features_ref.shape[1])   
+        if faiss_on_cpu:
+            # similariy search on CPU
+            knn_index = faiss.IndexFlatL2(features_ref.shape[1])
+        else:
+            # similariy search on GPU
+            res = faiss.StandardGpuResources()
+            knn_index = faiss.GpuIndexFlatL2(res, features_ref.shape[1])
+
+
         if knn_metric == "L2_normalized":
             faiss.normalize_L2(features_ref)
-        gpu_index.add(features_ref)
+        knn_index.add(features_ref)
 
         # end measuring time (for memory bank set up; in seconds, same for all test samples of this object)
         time_memorybank = time.time() - start_time
@@ -151,14 +158,14 @@ def run_anomaly_detection(
 
                 # Compute distances to nearest neighbors in M
                 if knn_metric == "L2":
-                    distances, match2to1 = gpu_index.search(features2, k = knn_neighbors)
+                    distances, match2to1 = knn_index.search(features2, k = knn_neighbors)
                     if knn_neighbors > 1:
                         distances = distances.mean(axis=1)
                     distances = np.sqrt(distances)
 
                 elif knn_metric == "L2_normalized":
                     faiss.normalize_L2(features2) 
-                    distances, match2to1 = gpu_index.search(features2, k = knn_neighbors)
+                    distances, match2to1 = knn_index.search(features2, k = knn_neighbors)
                     if knn_neighbors > 1:
                         distances = distances.mean(axis=1)
                     distances = distances / 2   # equivalent to cosine distance (1 - cosine similarity)
