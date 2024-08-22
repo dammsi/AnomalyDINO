@@ -10,6 +10,7 @@ This is the official code to reproduce the experiments in the paper [AnomalyDINO
     ```shell
     pip install -r requirements.txt
     ```
+    Info: If you want to use `faiss` with GPU-acceleration we recommend setting up a conda environment with the required packages instead (only conda installation is supported, see, e.g., [here](https://github.com/facebookresearch/faiss/wiki/Installing-Faiss#why-dont-you-support-installing-via-xxx-)).
 
 2. Download and prepare the datasets [MVTec-AD](https://www.mvtec.com/company/research/datasets/mvtec-ad) and [VisA](https://github.com/amazon-science/spot-diff) from their official sources.
 For VisA, follow the instruction in the official repo to organize the data in the official 1-class splits. 
