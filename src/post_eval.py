@@ -294,7 +294,7 @@ def mean_top1p(distances):
         return np.mean(sorted(distances.flatten(), reverse = True)[:int(len(distances) * 0.01)])
 
 
-def eval_segmentation(gt_filenames, prediction_filenames, pro_integration_limit=0.3, delete_tiff_files=False):
+def eval_segmentation(gt_filenames, prediction_filenames, pro_integration_limit=0.3, delete_tiff_files=True):
     # Read all ground truth and anomaly images.
     ground_truth = []
     predictions = []
