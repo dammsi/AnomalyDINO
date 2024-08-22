@@ -150,7 +150,7 @@ class DINOv2Wrapper(VisionTransformerWrapper):
 
 
     def compute_background_mask_from_image(self, image, threshold = 10, masking_type = None):
-        image_tensor, grid_size, _ = self.prepare_image(image)
+        image_tensor, grid_size = self.prepare_image(image)
         tokens = self.extract_features(image_tensor)
         return self.compute_background_mask(tokens, grid_size, threshold, masking_type)
 
