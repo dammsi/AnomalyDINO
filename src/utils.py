@@ -15,19 +15,19 @@ def augment_image(img_ref, augmentation = "rotate", angles = [0, 45, 90, 135, 18
     return imgs
 
 
+def rotate_image(image, angle):
+    image_center = tuple(np.array(image.shape[1::-1]) / 2)
+    rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
+    result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_DEFAULT)
+    return result
+
+
 def dists2map(dists, img_shape):
     # resize and smooth the distance map
     # caution: cv2.resize expects the shape in (width, height) order (not (height, width) as in numpy, so indices here are swapped!
     dists = cv2.resize(dists, (img_shape[1], img_shape[0]), interpolation = cv2.INTER_LINEAR)
     dists = gaussian_filter(dists, sigma=4)
     return dists
-
-
-def rotate_image(image, angle):
-    image_center = tuple(np.array(image.shape[1::-1]) / 2)
-    rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
-    result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_DEFAULT)
-    return result
 
 
 def resize_mask_img(mask, image_shape, grid_size1):
@@ -71,7 +71,8 @@ def plot_ref_images(img_list, mask_list, vis_background_list, grid_size, save_pa
 
 def get_dataset_info(dataset, preprocess):
 
-    if preprocess not in ["informed", "agnostic", "force_no_mask_no_rotation"]:
+    if preprocess not in ["informed", "agnostic", "masking_only", "informed_no_mask", "agnostic_no_mask", "force_no_mask_no_rotation", "force_mask_no_rotation", "force_no_mask_rotation", "force_mask_rotation"]:
+        # masking only: deactivate rotation, apply masking like in informed/agnostic
         raise ValueError(f"Preprocessing '{preprocess}' not yet covered!")
     
     if dataset == "MVTec":
@@ -93,12 +94,12 @@ def get_dataset_info(dataset, preprocess):
                             "zipper": ["broken_teeth", "combined", "fabric_border", "fabric_interior", "rough", "split_teeth", "squeezed_teeth"]
                             }
 
-        if preprocess in ["agnostic", "informed"]:
-            # Define Masking for the different objects -> determine with Masking Test 
+        if preprocess in ["agnostic", "informed", "masking_only"]:
+            # Define Masking for the different objects -> determine with Masking Test (see Fig. 2 and discussion in the paper)
             # True: default masking (threshold the first PCA component > 10)
             # False: No masking will be applied
             masking_default = {"bottle": False,      
-                                "cable": False,          # no masking
+                                "cable": False,         # no masking
                                 "capsule": True,        # default masking
                                 "carpet": False,
                                 "grid": False,
@@ -113,7 +114,8 @@ def get_dataset_info(dataset, preprocess):
                                 "wood": False,
                                 "zipper": False
                                 }
-        if preprocess == "informed":
+            
+        if preprocess in ["informed", "informed_no_mask"]:
             rotation_default = {"bottle": False,
                                 "cable": False, 
                                 "capsule": False,
@@ -130,8 +132,14 @@ def get_dataset_info(dataset, preprocess):
                                 "wood": False,
                                 "zipper": False
                                 }
-        elif preprocess == "agnostic":
+
+        elif preprocess in ["agnostic", "agnostic_no_mask"]:
             rotation_default = {o: True for o in objects}
+        elif preprocess == "masking_only":
+            rotation_default = {o: False for o in objects}
+
+        if preprocess in ["informed_no_mask", "agnostic_no_mask"]:
+            masking_default = {o: False for o in objects}
 
     elif dataset == "VisA":
         objects = ["candle", "capsules", "cashew", "chewinggum", "fryum", "macaroni1", "macaroni2", "pcb1", "pcb2", "pcb3", "pcb4", "pipe_fryum"]
@@ -148,16 +156,30 @@ def get_dataset_info(dataset, preprocess):
                             "pcb4": ["bad"],
                             "pipe_fryum": ["bad"],
                             }
-        masking_default = {o: True for o in objects}
-        if preprocess == "agnostic":
+
+        if preprocess in ["informed_no_mask", "agnostic_no_mask"]:
+            masking_default = {o: False for o in objects}
+        else:
+            masking_default = {o: True for o in objects}
+
+        if preprocess in ["agnostic", "agnostic_no_mask"]:
             rotation_default = {o: True for o in objects}
-        elif preprocess == "informed":
+        elif preprocess in ["informed", "masking_only", "informed_no_mask"]:
             rotation_default = {o: False for o in objects}
     else:
         raise ValueError(f"Dataset '{dataset}' not yet covered!")
 
-    if preprocess == "force_no_mask_rotation":
+    if preprocess == "force_no_mask_no_rotation":
+        masking_default = {o: False for o in objects}
+        rotation_default = {o: False for o in objects}
+    elif preprocess == "force_mask_no_rotation":
+        masking_default = {o: True for o in objects}
+        rotation_default = {o: False for o in objects}
+    elif preprocess == "force_no_mask_rotation":
         masking_default = {o: False for o in objects}
         rotation_default = {o: True for o in objects}
+    elif preprocess == "force_mask_rotation":
+        masking_default = {o: True for o in objects}
+        rotation_default = {o: True for o in objects}
 
-    return objects, object_anomalies, masking_default, rotation_default 
+    return objects, object_anomalies, masking_default, rotation_default

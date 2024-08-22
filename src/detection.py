@@ -6,29 +6,32 @@ from tqdm import tqdm
 import faiss
 from scipy.ndimage import gaussian_filter
 import tifffile as tiff
+import time
+import torch
 
 from src.utils import augment_image, dists2map, plot_ref_images
+from src.post_eval import mean_top1p
 
-
-def run_anomaly_detection(dm,
-                        object_name, 
-                        data_root,
-                        n_ref_samples,
-                        object_anomalies,
-                        plots_dir,
-                        save_examples = True,
-                        masking = None,
-                        rotation = False,
-                        knn_metric = 'L2_normalized',
-                        knn_neighbors = 1, 
-                        seed = 0,
-                        save_patch_dists = True,
-                        save_tiffs = False):
+def run_anomaly_detection(
+        model,
+        object_name,
+        data_root,
+        n_ref_samples,
+        object_anomalies,
+        plots_dir,
+        save_examples = False,
+        masking = None,
+        rotation = False,
+        knn_metric = 'L2_normalized',
+        knn_neighbors = 1,
+        seed = 0,
+        save_patch_dists = True,
+        save_tiffs = False):
     """
     Main function to evaluate the anomaly detection performance of a given object/product.
 
     Parameters:
-    - dm: The DINO model for feature extraction and masking.
+    - model: The backbone model for feature extraction (and, in case of DINOv2, masking).
     - object_name: The name of the object/product to evaluate.
     - data_root: The root directory of the dataset.
     - n_ref_samples: The number of reference samples to use for evaluation (k-shot). Set to -1 for full-shot setting.
@@ -69,124 +72,147 @@ def run_anomaly_detection(dm,
 
     if len(img_ref_samples) < n_ref_samples:
         print(f"Warning: Not enough reference samples for {object_name}! Only {len(img_ref_samples)} samples available.")
-        
-    for img_ref_n in img_ref_samples:
-        # load reference image...
-        img_ref = f"{img_ref_folder}{img_ref_n}"
-        image_ref = cv2.cvtColor(cv2.imread(img_ref, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
-
-        # augment reference image (if applicable)...
-        if rotation:
-            img_augmented = augment_image(image_ref)
-        else:
-            img_augmented = [image_ref]
-        for i in range(len(img_augmented)):
-            image_ref = img_augmented[i]
-            image_ref_tensor, grid_size1, _ = dm.prepare_image(image_ref)
-            features_ref_i = dm.extract_features(image_ref_tensor)
-            features_ref.append(features_ref_i)
-            if save_examples:
-                images_ref.append(image_ref)
-                mask_ref = dm.compute_background_mask(features_ref_i, grid_size1, threshold=10, masking_type=masking)
-                vis_image_background = dm.get_embedding_visualization(features_ref_i, grid_size1, mask_ref)
-                masks_ref.append(mask_ref)
-                vis_backgroud.append(vis_image_background)
-
-    # plot some reference samples for inspection
-    if save_examples:
-        plots_dir_ = f"{plots_dir}/{object_name}/"
-        plot_ref_images(images_ref, masks_ref, vis_backgroud, grid_size1, plots_dir_, title = "Reference Images", img_names = img_ref_samples)   
     
-    # set up the KNN index
-    if knn_metric == "L2":
-        features_ref = np.concatenate(features_ref, axis=0)
-        knn_index1 = faiss.IndexFlatL2(features_ref.shape[1])
-        knn_index1.add(features_ref)
-    elif knn_metric == "L2_normalized":
-        features_ref = np.concatenate(features_ref, axis=0)
-        knn_index1 = faiss.IndexFlatL2(features_ref.shape[1])
-        faiss.normalize_L2(features_ref)
-        knn_index1.add(features_ref)
+    with torch.inference_mode():
+        # start measuring time (feature extraction/memory bank set up)
+        start_time = time.time()
+        for img_ref_n in tqdm(img_ref_samples, desc="Building memory bank", leave=False):
+            # load reference image...
+            img_ref = f"{img_ref_folder}{img_ref_n}"
+            image_ref = cv2.cvtColor(cv2.imread(img_ref, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
 
-    idx = 0
-    # Evaluate anomalies for each anomaly type (and "good")
-    for type_anomaly in tqdm(type_anomalies, desc = f"processing test samples ({object_name})"):
-        data_dir = f"{data_root}/{object_name}/test/{type_anomaly}"
-        
-        if save_patch_dists or save_tiffs:
-            os.makedirs(f"{plots_dir}/anomaly_maps/seed={seed}/{object_name}/test/{type_anomaly}", exist_ok=True)
-        
-        for idx, img_test_nr in enumerate(sorted(os.listdir(data_dir))):
-            image_test_path = f"{data_dir}/{img_test_nr}"
-
-            # Extract test features
-            image_test = cv2.cvtColor(cv2.imread(image_test_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
-            image_tensor2, grid_size2, resize_scale2 = dm.prepare_image(image_test)
-            features2 = dm.extract_features(image_tensor2)
-
-            # Compute background mask
-            if masking:
-                mask2 = dm.compute_background_mask(features2, grid_size2, threshold=10, masking_type=masking)
+            # augment reference image (if applicable)...
+            if rotation:
+                img_augmented = augment_image(image_ref)
             else:
-                mask2 = np.ones(features2.shape[0], dtype=bool)
-            if idx < 3:
-                vis_image_test_background = dm.get_embedding_visualization(features2, grid_size2, mask2)
-
-            # Compute distances to nearest neighbors in M
-            if knn_metric == "L2":
-                distances, match2to1 = knn_index1.search(features2, k = knn_neighbors)
-                if knn_neighbors >= 1:
-                    distances = distances.mean(axis=1)
-                distances = np.sqrt(distances)
-
-            elif knn_metric == "L2_normalized":
-                faiss.normalize_L2(features2) 
-                distances, match2to1 = knn_index1.search(features2, k = knn_neighbors)
-                if knn_neighbors >= 1:
-                    distances = distances.mean(axis=1)
-                distances = distances / 2   # equivalent to cosine distance (1 - cosine similarity)
-
-            d_masked = distances.reshape(grid_size2)
-            d_masked[~mask2.reshape(grid_size2)] = 0.0 # set distances of masked out patches to 0
-            
-            # Save the anomaly maps (raw as .npy or full resolution .tiff files)
-            img_test_nr = img_test_nr.split(".")[0]
-            if save_tiffs:
-                anomaly_map = dists2map(d_masked, image_test.shape)
-                tiff.imwrite(f"{plots_dir}/anomaly_maps/seed={seed}/{object_name}/test/{type_anomaly}/{img_test_nr}.tiff", anomaly_map)
-            if save_patch_dists:
-                np.save(f"{plots_dir}/anomaly_maps/seed={seed}/{object_name}/test/{type_anomaly}/{img_test_nr}.npy", d_masked)
-
-            # Save some example plots (3 per anomaly type)
-            if save_examples and idx < 3:
-
-                fig, (ax1, ax2, ax3, ax4,) = plt.subplots(1, 4, figsize=(18, 4.5))
-
-                # plot test image, PCA + mask
-                ax1.imshow(image_test)
-                ax2.imshow(vis_image_test_background)  
-
-                # plot patch distances 
-                d_masked[~mask2.reshape(grid_size2)] = 0.0
-                plt.colorbar(ax3.imshow(d_masked), ax=ax3, fraction=0.12, pad=0.05, orientation="horizontal")
+                img_augmented = [image_ref]
+            for i in range(len(img_augmented)):
+                image_ref = img_augmented[i]
+                image_ref_tensor, grid_size1 = model.prepare_image(image_ref)
+                features_ref_i = model.extract_features(image_ref_tensor)
                 
-                # compute image level anomaly score (mean(top 1%) of patches = empirical tail value at risk for quantile 0.99)
-                score_top1p = np.mean(sorted(distances, reverse = True)[:int(len(distances) * 0.01)])
-                ax4.axvline(score_top1p, color='r', linestyle='dashed', linewidth=1, label=round(score_top1p, 2))
-                ax4.legend()
-                ax4.hist(distances.flatten()[mask2])
+                # compute background mask and discard background patches
+                mask_ref = model.compute_background_mask(features_ref_i, grid_size1, threshold=10, masking_type=masking)
+                features_ref.append(features_ref_i[mask_ref])
+                if save_examples:
+                    images_ref.append(image_ref)
+                    vis_image_background = model.get_embedding_visualization(features_ref_i, grid_size1, mask_ref)
+                    masks_ref.append(mask_ref)
+                    vis_backgroud.append(vis_image_background)
+        
+        features_ref = np.concatenate(features_ref, axis=0).astype('float32')
 
-                ax1.axis('off')
-                ax2.axis('off')
-                ax3.axis('off')
+        # set up the KNN index (on GPU)
+        res = faiss.StandardGpuResources()
+        gpu_index = faiss.GpuIndexFlatL2(res, features_ref.shape[1])   
+        if knn_metric == "L2_normalized":
+            faiss.normalize_L2(features_ref)
+        gpu_index.add(features_ref)
 
-                ax1.title.set_text("Test")
-                ax2.title.set_text("Test (PCA + Mask)")
-                ax3.title.set_text("Patch Distances (1NN)")
-                ax4.title.set_text("Hist of Distances")
+        # end measuring time (for memory bank set up; in seconds, same for all test samples of this object)
+        time_memorybank = time.time() - start_time
 
-                plt.suptitle(f"Object: {object_name}, Type: {type_anomaly}, img = ...{image_test_path[-20:]}, object patches = {mask2.sum()}/{features2.shape[0]}")
+        # plot some reference samples for inspection
+        if save_examples:
+            plots_dir_ = f"{plots_dir}/{object_name}/"
+            plot_ref_images(images_ref, masks_ref, vis_backgroud, grid_size1, plots_dir_, title = "Reference Images", img_names = img_ref_samples)   
+        
+        inference_times = {}
+        anomaly_scores = {}
 
-                plt.tight_layout()
-                plt.savefig(f"{plots_dir}/{object_name}/examples/example_{type_anomaly}_{idx}.png")
-                plt.close()
+        idx = 0
+        # Evaluate anomalies for each anomaly type (and "good")
+        for type_anomaly in tqdm(type_anomalies, desc = f"processing test samples ({object_name})"):
+            data_dir = f"{data_root}/{object_name}/test/{type_anomaly}"
+            
+            if save_patch_dists or save_tiffs:
+                os.makedirs(f"{plots_dir}/anomaly_maps/seed={seed}/{object_name}/test/{type_anomaly}", exist_ok=True)
+            
+            for idx, img_test_nr in enumerate(sorted(os.listdir(data_dir))):
+                # start measuring time (inference)
+                start_time = time.time()
+                image_test_path = f"{data_dir}/{img_test_nr}"
+
+                # Extract test features
+                image_test = cv2.cvtColor(cv2.imread(image_test_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
+                image_tensor2, grid_size2 = model.prepare_image(image_test)
+                features2 = model.extract_features(image_tensor2)
+
+                # Compute background mask
+                if masking:
+                    mask2 = model.compute_background_mask(features2, grid_size2, threshold=10, masking_type=masking)
+                else:
+                    mask2 = np.ones(features2.shape[0], dtype=bool)
+                if save_examples and idx < 3:
+                    vis_image_test_background = model.get_embedding_visualization(features2, grid_size2, mask2)
+
+                # Discard irrelevant features
+                features2 = features2[mask2]
+
+                # Compute distances to nearest neighbors in M
+                if knn_metric == "L2":
+                    distances, match2to1 = gpu_index.search(features2, k = knn_neighbors)
+                    if knn_neighbors > 1:
+                        distances = distances.mean(axis=1)
+                    distances = np.sqrt(distances)
+
+                elif knn_metric == "L2_normalized":
+                    faiss.normalize_L2(features2) 
+                    distances, match2to1 = gpu_index.search(features2, k = knn_neighbors)
+                    if knn_neighbors > 1:
+                        distances = distances.mean(axis=1)
+                    distances = distances / 2   # equivalent to cosine distance (1 - cosine similarity)
+
+                output_distances = np.zeros_like(mask2, dtype=float)
+                output_distances[mask2] = distances.squeeze()
+                d_masked = output_distances.reshape(grid_size2)
+                
+                # save inference time
+                torch.cuda.synchronize() # Synchronize CUDA kernels before measuring time
+                inf_time = time.time() - start_time
+                inference_times[f"{type_anomaly}/{img_test_nr}"] = inf_time
+                anomaly_scores[f"{type_anomaly}/{img_test_nr}"] = mean_top1p(output_distances.flatten())
+
+                # Save the anomaly maps (raw as .npy or full resolution .tiff files)
+                img_test_nr = img_test_nr.split(".")[0]
+                if save_tiffs:
+                    anomaly_map = dists2map(d_masked, image_test.shape)
+                    tiff.imwrite(f"{plots_dir}/anomaly_maps/seed={seed}/{object_name}/test/{type_anomaly}/{img_test_nr}.tiff", anomaly_map)
+                if save_patch_dists:
+                    np.save(f"{plots_dir}/anomaly_maps/seed={seed}/{object_name}/test/{type_anomaly}/{img_test_nr}.npy", d_masked)
+
+                # Save some example plots (3 per anomaly type)
+                if save_examples and idx < 3:
+
+                    fig, (ax1, ax2, ax3, ax4,) = plt.subplots(1, 4, figsize=(18, 4.5))
+
+                    # plot test image, PCA + mask
+                    ax1.imshow(image_test)
+                    ax2.imshow(vis_image_test_background)  
+
+                    # plot patch distances 
+                    d_masked[~mask2.reshape(grid_size2)] = 0.0
+                    plt.colorbar(ax3.imshow(d_masked), ax=ax3, fraction=0.12, pad=0.05, orientation="horizontal")
+                    
+                    # compute image level anomaly score (mean(top 1%) of patches = empirical tail value at risk for quantile 0.99)
+                    score_top1p = mean_top1p(distances)
+                    ax4.axvline(score_top1p, color='r', linestyle='dashed', linewidth=1, label=round(score_top1p, 2))
+                    ax4.legend()
+                    ax4.hist(distances.flatten())
+
+                    ax1.axis('off')
+                    ax2.axis('off')
+                    ax3.axis('off')
+
+                    ax1.title.set_text("Test")
+                    ax2.title.set_text("Test (PCA + Mask)")
+                    ax3.title.set_text("Patch Distances (1NN)")
+                    ax4.title.set_text("Hist of Distances")
+
+                    plt.suptitle(f"Object: {object_name}, Type: {type_anomaly}, img = ...{image_test_path[-20:]}, object patches = {mask2.sum()}/{mask2.size}")
+
+                    plt.tight_layout()
+                    plt.savefig(f"{plots_dir}/{object_name}/examples/example_{type_anomaly}_{idx}.png")
+                    plt.close()
+
+    return anomaly_scores, time_memorybank, inference_times

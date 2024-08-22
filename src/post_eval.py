@@ -1,6 +1,6 @@
-# This evaluation scripts partly builds on the official evaluation script for MVTec-AD,
-# original code available here: https://www.mvtec.com/company/research/datasets/mvtec-ad
-
+""""
+This evaluation scripts partly builds on the official evaluation script for MVTec-AD (original code available here: https://www.mvtec.com/company/research/datasets/mvtec-ad).
+"""
 
 import json
 from sklearn.metrics import auc, roc_auc_score, average_precision_score, f1_score, precision_recall_curve, pairwise
@@ -288,7 +288,10 @@ def compute_pro(anomaly_maps, ground_truth_maps):
 
 
 def mean_top1p(distances):
-     return np.mean(sorted(distances.flatten(), reverse = True)[:int(len(distances) * 0.01)])
+    if int(len(distances) * 0.01) == 0:
+        return np.max(distances)
+    else:
+        return np.mean(sorted(distances.flatten(), reverse = True)[:int(len(distances) * 0.01)])
 
 
 def eval_segmentation(gt_filenames, prediction_filenames, pro_integration_limit=0.3, delete_tiff_files=False):

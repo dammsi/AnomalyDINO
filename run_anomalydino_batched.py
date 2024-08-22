@@ -1,8 +1,9 @@
 import os
 
 from src.detection import augment_image
-from src.dino import DINOv2
+from src.backbones import get_model_wrapper
 from src.utils import get_dataset_info
+
 from tqdm.auto import tqdm, trange
 import matplotlib.pyplot as plt
 import numpy as np
@@ -25,7 +26,7 @@ def parse_args():
     parser.add_argument("--resolution", type=int, default=448)
     parser.add_argument("--preprocess", type=str, default="agnostic")
     parser.add_argument("--save_examples", default=True)
-    parser.add_argument("--device", default='cuda:1')
+    parser.add_argument("--device", default='cuda:0')
     
     args = parser.parse_args()
     return args
@@ -59,7 +60,7 @@ def calculate_cosine_distances(features_all, sample_index, quantile = 0.001):
     return means_below_quantile.cpu().numpy()
 
 
-def evaluate_ad_batched(dm,
+def evaluate_ad_batched(model,
                         data_root, 
                         plots_dir,
                         masking_default,
@@ -92,10 +93,10 @@ def evaluate_ad_batched(dm,
             for img_test_nr in sorted(os.listdir(data_dir)):
                 img_test = f"{data_dir}/{img_test_nr}"
                 img_test = cv2.cvtColor(cv2.imread(img_test, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
-                image_tensor, grid_size, resize_scale = dm.prepare_image(img_test)
+                image_tensor, grid_size = model.prepare_image(img_test)
 
-                features = dm.extract_features(image_tensor)
-                mask_test = dm.compute_background_mask(features, grid_size, threshold=10, masking_type=masking_default[object_name])
+                features = model.extract_features(image_tensor)
+                mask_test = model.compute_background_mask(features, grid_size, threshold=10, masking_type=masking_default[object_name])
                 imgs_all.append(img_test)
                 features_all.append(features)
                 masks_ref.append(mask_test)
@@ -124,6 +125,7 @@ def evaluate_ad_batched(dm,
 
             # plot anomaly map
             vmax = np.max(y_scores[y_true == 0]) * 1.2
+            # print(vmax)
             fig, axes = plt.subplots(len(type_anomalies), 5, figsize=(10, 2*len(type_anomalies)))
             for i, sample_idx in enumerate(sample_indices):
                 ax = axes[i//5, i%5]
@@ -147,7 +149,7 @@ if __name__=="__main__":
     args = parse_args()
 
     args.model_name = "dinov2_vit" + args.model_size.lower() + "14"
-    dm = DINOv2(model_name=args.model_name, smaller_edge_size=args.resolution, device=args.device)
+    model = get_model_wrapper(args.model_name, args.device, smaller_edge_size=args.resolution)
     dataset = args.dataset
     objects, object_anomalies, masking_default, rotation_default = get_dataset_info(args.dataset, args.preprocess)
 
@@ -167,13 +169,14 @@ if __name__=="__main__":
     with open(f"{plot_dir}/args.yaml", "w") as f:
         yaml.dump(vars(args), f)
     
-    AUROCs = evaluate_ad_batched(dm, 
+    AUROCs = evaluate_ad_batched(model,
                                  args.data_root, 
                                  plot_dir, save_examples = True, 
                                  masking_default = masking_default)
     
     df = pd.DataFrame.from_dict(AUROCs, orient='index', columns=['AUROC'])
-    # comoute mean over categories and save to file
+
+    # compute mean over categories and save to file
     df.loc['MEAN'] = df.mean()
     df = df * 100
     df.to_csv(f"{plot_dir}/AUROCs.csv")
