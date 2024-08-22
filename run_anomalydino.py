@@ -11,7 +11,7 @@ from src.utils import get_dataset_info
 from src.detection import run_anomaly_detection
 from src.post_eval import eval_finished_run
 from src.visualize import create_sample_plots
-from src.backbones import get_model_wrapper
+from src.backbones import get_model
 
 
 class IntListAction(Action):
@@ -62,7 +62,7 @@ if __name__=="__main__":
 
     objects, object_anomalies, masking_default, rotation_default = get_dataset_info(args.dataset, args.preprocess)
 
-    model = get_model_wrapper(args.model_name, args.device, smaller_edge_size=args.resolution)
+    model = get_model(args.model_name, args.device, smaller_edge_size=args.resolution)
 
     if not args.model_name.startswith("dinov2"):
         masking_default = {o: False for o in objects}

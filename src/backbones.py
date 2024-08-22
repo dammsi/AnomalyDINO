@@ -169,7 +169,7 @@ class DINOv2Wrapper(VisionTransformerWrapper):
         return mask.squeeze()
 
 
-def get_model_wrapper(model_name, device, smaller_edge_size=448):
+def get_model(model_name, device, smaller_edge_size=448):
     print(f"Loading model: {model_name}")
     print(f"Device: {device}")
     print(f"Smaller edge size: {smaller_edge_size}")

@@ -1,7 +1,7 @@
 import os
 
 from src.detection import augment_image
-from src.backbones import get_model_wrapper
+from src.backbones import get_model
 from src.utils import get_dataset_info
 
 from tqdm.auto import tqdm, trange
@@ -149,7 +149,7 @@ if __name__=="__main__":
     args = parse_args()
 
     args.model_name = "dinov2_vit" + args.model_size.lower() + "14"
-    model = get_model_wrapper(args.model_name, args.device, smaller_edge_size=args.resolution)
+    model = get_model(args.model_name, args.device, smaller_edge_size=args.resolution)
     dataset = args.dataset
     objects, object_anomalies, masking_default, rotation_default = get_dataset_info(args.dataset, args.preprocess)
 
