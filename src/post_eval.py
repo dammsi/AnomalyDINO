@@ -16,6 +16,9 @@ import tifffile as tiff
 from scipy.ndimage import label
 from bisect import bisect
 
+from src.utils import dists2map
+
+
 
 def parse_dataset_files(object_name, dataset_base_dir, anomaly_maps_dir, dataset="MVTec"):
     """Parse the filenames for one object of the MVTec AD dataset.
@@ -293,6 +296,10 @@ def mean_top1p(distances):
     else:
         return np.mean(sorted(distances.flatten(), reverse = True)[:int(len(distances) * 0.01)])
 
+def max_anomaly_map(distances, img_size):
+    anomaly_map = dists2map(distances, img_size)
+    return np.max(anomaly_map)
+
 
 def eval_segmentation(gt_filenames, prediction_filenames, pro_integration_limit=0.3, delete_tiff_files=True):
     # Read all ground truth and anomaly images.
@@ -344,16 +351,26 @@ def eval_segmentation(gt_filenames, prediction_filenames, pro_integration_limit=
     return au_pro, auroc_px, f1_px
 
 
-def eval_classification(gt_filenames, prediction_filenames):
+def eval_classification(gt_filenames, prediction_filenames, aggregation_statistics = "meantop1p"):
     # Read all ground truth and anomaly images.
     ground_truth = []
     predictions = []
+
+    gt_img_size = []
 
     print("Read ground truth files and corresponding predictions...")
     for (gt_name, pred_name) in tqdm(zip(gt_filenames, prediction_filenames),
                                      total=len(gt_filenames)):
         prediction = np.load(pred_name + '.npy') 
         predictions.append(prediction)
+
+        if aggregation_statistics == "max_anomaly_map":
+            # read in the test image to get the shape of the anomaly map
+            img = pred_name.split("/")[-4:]
+            # img = "data/mvtec_anomaly_detection/" + "/".join(img) + ".png"
+            img = "data/VisA_pytorch/1cls/" + "/".join(img) + ".JPG"
+            image_test = cv2.imread(img, cv2.IMREAD_GRAYSCALE)
+            gt_img_size.append(image_test.shape)        
 
         if gt_name is not None:
             ground_truth.append(np.asarray(Image.open(gt_name)))
@@ -364,7 +381,14 @@ def eval_classification(gt_filenames, prediction_filenames):
     binary_labels = [int(np.any(x > 0)) for x in ground_truth]
     del ground_truth
 
-    predictions = [mean_top1p(dist.flatten()) for dist in predictions]
+    if aggregation_statistics == "meantop1p":
+        predictions = [mean_top1p(dist.flatten()) for dist in predictions]
+    elif aggregation_statistics == "max_anomaly_map":
+        predictions = [max_anomaly_map(dist.flatten(), img_size) for dist, img_size in zip(predictions, gt_img_size)]
+    elif aggregation_statistics == "max_patch_distance":
+        predictions = [np.max(dist.flatten()) for dist in predictions]
+    else:
+        raise ValueError(f"Unknown aggregation statistics: {aggregation_statistics}")
 
     # Compute image-level AUROC
     auroc_clf = roc_auc_score(binary_labels, predictions)
@@ -391,7 +415,7 @@ def get_objects_from_dataset(dataset):
     return objects
     
 
-def eval_finished_run(dataset, dataset_base_dir, anomaly_maps_dir, output_dir, seed = None, pro_integration_limit = 0.3, eval_clf = True, eval_segm = False, delete_tiff_files = True):
+def eval_finished_run(dataset, dataset_base_dir, anomaly_maps_dir, output_dir, seed = None, pro_integration_limit = 0.3, eval_clf = True, eval_segm = False, delete_tiff_files = True, aggregation_statistics = "meantop1p"):
     """
     Evaluate the results of a finished run on the MVTec AD dataset.
     Arguments:
@@ -457,7 +481,8 @@ def eval_finished_run(dataset, dataset_base_dir, anomaly_maps_dir, output_dir, s
             auroc_clf, ap_clf, f1_clf = \
                 eval_classification(
                     gt_filenames,
-                    prediction_filenames)
+                    prediction_filenames,
+                    aggregation_statistics = aggregation_statistics)
 
             evaluation_dict[obj]['classification_AUROC'] = auroc_clf
             evaluation_dict[obj]['classification_AP'] = ap_clf

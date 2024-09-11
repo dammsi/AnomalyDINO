@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 import faiss
-from scipy.ndimage import gaussian_filter
 import tifffile as tiff
 import time
 import torch
@@ -21,6 +20,7 @@ def run_anomaly_detection(
         plots_dir,
         save_examples = False,
         masking = None,
+        mask_ref_images = False,
         rotation = False,
         knn_metric = 'L2_normalized',
         knn_neighbors = 1,
@@ -93,7 +93,7 @@ def run_anomaly_detection(
                 features_ref_i = model.extract_features(image_ref_tensor)
                 
                 # compute background mask and discard background patches
-                mask_ref = model.compute_background_mask(features_ref_i, grid_size1, threshold=10, masking_type=masking)
+                mask_ref = model.compute_background_mask(features_ref_i, grid_size1, threshold=10, masking_type=(mask_ref_images and masking))
                 features_ref.append(features_ref_i[mask_ref])
                 if save_examples:
                     images_ref.append(image_ref)
@@ -110,6 +110,8 @@ def run_anomaly_detection(
             # similariy search on GPU
             res = faiss.StandardGpuResources()
             knn_index = faiss.GpuIndexFlatL2(res, features_ref.shape[1])
+            # knn_index = faiss.IndexFlatL2(features_ref.shape[1])
+            # knn_index = faiss.index_cpu_to_gpu(res, int(model.device[-1]), knn_index)
 
 
         if knn_metric == "L2_normalized":

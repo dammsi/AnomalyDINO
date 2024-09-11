@@ -41,6 +41,7 @@ def parse_args():
     parser.add_argument("--shots", nargs='+', type=int, default=[1], #action=IntListAction,
                         help="List of shots to evaluate. Full-shot scenario is -1.")
     parser.add_argument("--num_seeds", type=int, default=1)
+    parser.add_argument("--mask_ref_images", default=False)
     parser.add_argument("--just_seed", type=int, default=None)
     parser.add_argument('--save_examples', default=True, action=argparse.BooleanOptionalAction, help="Save example plots.")
     parser.add_argument("--eval_clf", default=True, action=argparse.BooleanOptionalAction, help="Evaluate anomaly detection performance.")
@@ -63,7 +64,9 @@ if __name__=="__main__":
 
     objects, object_anomalies, masking_default, rotation_default = get_dataset_info(args.dataset, args.preprocess)
 
-    model = get_model(args.model_name, args.device, smaller_edge_size=args.resolution)
+    # set CUDA device
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device[-1])
+    model = get_model(args.model_name, 'cuda', smaller_edge_size=args.resolution)
 
     if not args.model_name.startswith("dinov2"):
         masking_default = {o: False for o in objects}
@@ -103,7 +106,7 @@ if __name__=="__main__":
             if os.path.exists(f"{results_dir}/metrics_seed={seed}.json"):
                 print(f"Results for shot {shot}, seed {seed} already exist. Skipping.")
                 continue
-            else:                
+            else:
                 timeit_file = results_dir + "/time_measurements.csv"
                 with open(timeit_file, 'w', newline='') as file:
                     writer = csv.writer(file)
@@ -117,7 +120,8 @@ if __name__=="__main__":
 
                         # CUDA warmup
                         for _ in trange(args.warmup_iters, desc="CUDA warmup", leave=False):
-                            img_tensor, grid_size = model.prepare_image(f"{args.data_root}/{object_name}/train/good/000.png")
+                            first_image = os.listdir(f"{args.data_root}/{object_name}/train/good")[0]
+                            img_tensor, grid_size = model.prepare_image(f"{args.data_root}/{object_name}/train/good/{first_image}")
                             features = model.extract_features(img_tensor)
                                          
                         anomaly_scores, time_memorybank, time_inference = run_anomaly_detection(
@@ -132,6 +136,7 @@ if __name__=="__main__":
                                                                                 knn_neighbors = args.k_neighbors,
                                                                                 faiss_on_cpu = args.faiss_on_cpu,
                                                                                 masking = masking_default[object_name],
+                                                                                mask_ref_images = args.mask_ref_images,
                                                                                 rotation = rotation_default[object_name],
                                                                                 seed = seed,
                                                                                 save_patch_dists = args.eval_clf, # save patch distances for detection evaluation
@@ -151,26 +156,24 @@ if __name__=="__main__":
                     inference_times = [float(row[4]) for row in reader]
                 print(f"Finished AD for {len(objects)} objects (seed {seed}), mean inference time: {sum(inference_times)/len(inference_times):.5f} s/sample")
 
+                # evaluate all finished runs and create sample anomaly maps for inspection
+                print(f"=========== Evaluate seed = {seed} ===========")
+                eval_finished_run(args.dataset, 
+                                args.data_root, 
+                                anomaly_maps_dir = results_dir + f"/anomaly_maps/seed={seed}", 
+                                output_dir = results_dir,
+                                seed = seed,
+                                pro_integration_limit = 0.3,
+                                eval_clf = args.eval_clf,
+                                eval_segm = args.eval_segm)
+                
+                create_sample_plots(results_dir, 
+                                    anomaly_maps_dir = results_dir + f"/anomaly_maps/seed={seed}", 
+                                    seed = seed,
+                                    dataset = args.dataset, 
+                                    data_root = args.data_root)
+            
                 # deactivate creation of examples for the next seeds...
                 save_examples = False 
-            
-        # evaluate all finished runs and create sample anomaly maps for inspection
-        for seed in seeds:
-            print(f"=========== Evaluate seed = {seed} ===========")
-            
-            eval_finished_run(args.dataset, 
-                              args.data_root, 
-                              anomaly_maps_dir = results_dir + f"/anomaly_maps/seed={seed}", 
-                              output_dir = results_dir,
-                              seed = seed,
-                              pro_integration_limit = 0.3,
-                              eval_clf = args.eval_clf,
-                              eval_segm = args.eval_segm)
-            
-            create_sample_plots(results_dir, 
-                                anomaly_maps_dir = results_dir + f"/anomaly_maps/seed={seed}", 
-                                seed = seed,
-                                dataset = args.dataset, 
-                                data_root = args.data_root)
 
     print("Finished and evaluated all runs!")
