@@ -52,16 +52,17 @@ def run_anomaly_detection(
     
     # add 'good' to the anomaly types
     type_anomalies = object_anomalies[object_name]
-    type_anomalies.append('good')
+    type_anomalies.append('good')#添加good类别，保证每个object所有类别均覆盖
 
     # ensure that each type is only evaluated once
     type_anomalies = list(set(type_anomalies))
+    #避免出现重复good类别，只出现一次
 
     # Extract reference features
-    features_ref = []
-    images_ref = []
-    masks_ref = []
-    vis_backgroud = []
+    features_ref = []#正常特征字典
+    images_ref = []#正常图片
+    masks_ref = []#正常mask
+    vis_backgroud = []#正常图片的背景可视化图
 
     img_ref_folder = f"{data_root}/{object_name}/train/good/"
     if n_ref_samples == -1:
