@@ -65,7 +65,7 @@ def run_anomaly_detection(
     vis_backgroud = []#正常图片的背景可视化图
 
     img_ref_folder = f"{data_root}/{object_name}/train/good/"
-    if n_ref_samples == -1:
+    if n_ref_samples == -1:#用于参考的正常样本数量，这里定义了如果为-1则全部参考
         # full-shot setting
         img_ref_samples = sorted(os.listdir(img_ref_folder))
     else:
@@ -110,14 +110,14 @@ def run_anomaly_detection(
         else:
             # similariy search on GPU
             res = faiss.StandardGpuResources()
-            knn_index = faiss.GpuIndexFlatL2(res, features_ref.shape[1])
+            knn_index = faiss.GpuIndexFlatL2(res, features_ref.shape[1])#使用最基础的faiss二维平面相似度搜索，可以用来计算不同之间相似度最高的L2距离
             # knn_index = faiss.IndexFlatL2(features_ref.shape[1])
             # knn_index = faiss.index_cpu_to_gpu(res, int(model.device[-1]), knn_index)
 
 
         if knn_metric == "L2_normalized":
             faiss.normalize_L2(features_ref)
-        knn_index.add(features_ref)
+        knn_index.add(features_ref)#使用.add，将处理好的向量数据灌入处理器
 
         # end measuring time (for memory bank set up; in seconds, same for all test samples of this object)
         time_memorybank = time.time() - start_time
@@ -161,7 +161,7 @@ def run_anomaly_detection(
 
                 # Compute distances to nearest neighbors in M
                 if knn_metric == "L2":
-                    distances, match2to1 = knn_index.search(features2, k = knn_neighbors)
+                    distances, match2to1 = knn_index.search(features2, k = knn_neighbors)#knn_index.search用于获得与features2相似特征的patch的距离，knn_neighbors
                     if knn_neighbors > 1:
                         distances = distances.mean(axis=1)
                     distances = np.sqrt(distances)
