@@ -3,4 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="anomaly_dino" />
   </component>
+  <component name="ProjectRootManager" version="2" project-jdk-name="anomaly_dino" project-jdk-type="Python SDK" />
 </project>
