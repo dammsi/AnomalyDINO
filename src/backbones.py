@@ -27,7 +27,7 @@ class VisionTransformerWrapper:
 # ViT-B/16 Wrapper
 class ViTWrapper(VisionTransformerWrapper):
     def load_model(self):
-        if self.model_name == "vit_b_16":
+        if self.model_name == "vit_b_16":#这里的 grid_size 是patch 网格大小，模型后面那个数字是指需要生成多少个patch，默认输入是224*224
             model = models.vit_b_16(weights = models.ViT_B_16_Weights.DEFAULT)
             self.transform = models.ViT_B_16_Weights.DEFAULT.transforms()
             self.grid_size = (14,14)
@@ -50,7 +50,8 @@ class ViTWrapper(VisionTransformerWrapper):
         # print(self.transform)
 
         return model.to(self.device)
-    
+    #输入可以是路径字符串或 ndarray，统一转成 PIL.Image，走 weights 自带的 transform（含 resize/crop/normalize）。
+    #返回 (img_tensor, self.grid_size)。注意：ViTWrapper 的 grid_size 是固定的、由模型配置决定。
     def prepare_image(self, img):
         if isinstance(img, str):
             img = Image.open(img).convert("RGB")
