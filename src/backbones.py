@@ -137,7 +137,7 @@ class DINOv2Wrapper(VisionTransformerWrapper):
         pca = PCA(n_components=3, svd_solver='randomized')
         if resized_mask is not None:
             tokens = tokens[resized_mask]
-        reduced_tokens = pca.fit_transform(tokens.astype(np.float32))
+        reduced_tokens = pca.fit_transform(tokens.astype(np.float32))#这里得到经过PCA主成分降维后的数据
         if resized_mask is not None:
             tmp_tokens = np.zeros((*resized_mask.shape, 3), dtype=reduced_tokens.dtype)
             tmp_tokens[resized_mask] = reduced_tokens

@@ -428,6 +428,17 @@ def eval_finished_run(dataset, dataset_base_dir, anomaly_maps_dir, output_dir, s
     - eval_clf: Whether to evaluate classification performance.
     - eval_segm: Whether to evaluate segmentation performance.
     - delete_tiff_files: Whether tiff files are deleted after evaluation (default True)
+    评估在 MVTec AD 数据集上已完成的一次运行结果。
+    参数：
+    - dataset: 待评估的数据集名称（可选值为 "MVTec" 或 "VisA"）。
+    - dataset_base_dir: MVTec AD 数据集的基础目录。
+    - anomaly_maps_dir: 异常图（anomaly maps）所在的基础目录。
+    - output_dir: 用于存储评估结果的目录。
+    - seed: 待评估运行的随机种子（seed）。
+    - pro_integration_limit: PRO 曲线的假阳性率（FPR）上限。
+    - eval_clf: 是否评估分类性能（布尔值）。
+    - eval_segm: 是否评估分割性能（布尔值）。
+    - delete_tiff_files: 评估后是否删除 TIFF 文件（默认值：True）
     """
 
     # Parse the filenames of all ground truth and corresponding anomaly

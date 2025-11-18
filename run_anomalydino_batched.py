@@ -27,7 +27,7 @@ def parse_args():
     parser.add_argument("--resolution", type=int, default=448)
     parser.add_argument("--preprocess", type=str, default="masking_only")
     parser.add_argument("--save_examples", default=True)
-    parser.add_argument("--device", default='cuda:3')
+    parser.add_argument("--device", default='cuda:0')
     
     args = parser.parse_args()
     return args
