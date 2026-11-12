@@ -89,16 +89,23 @@ Other backbones can be selected with `--model_name` (e.g., `dinov3_vits16`), the
 ### DINOv2 vs. DINOv3
 Image-level AUROC (%) with the default settings (agnostic preprocessing, last block), mean ± std over 3 seeds:
 
-| Dataset | Backbone | Resolution | 1-shot | 2-shot | 4-shot | 8-shot | 16-shot |
-|---|---|---|---|---|---|---|---|
-| MVTec-AD | DINOv2 ViT-S/14 | 448 | 96.5 ± 0.5 | 96.7 ± 1.0 | 97.6 ± 0.1 | 98.0 ± 0.1 | 98.3 ± 0.1 |
-| MVTec-AD | DINOv2 ViT-S/14 | 672 | **96.6 ± 0.5** | **96.9 ± 0.8** | **97.7 ± 0.2** | **98.2 ± 0.2** | **98.4 ± 0.1** |
-| MVTec-AD | DINOv3 ViT-S/16 | 512 | 93.0 ± 1.1 | 93.9 ± 1.2 | 94.8 ± 0.3 | 96.0 ± 0.6 | 97.1 ± 0.3 |
-| MVTec-AD | DINOv3 ViT-S/16 | 768 | 92.2 ± 1.2 | 93.4 ± 1.0 | 94.5 ± 0.8 | 95.8 ± 0.9 | 97.1 ± 0.6 |
-| VisA | DINOv2 ViT-S/14 | 448 | 85.6 ± 1.8 | 88.3 ± 2.1 | 91.2 ± 0.9 | 92.5 ± 0.1 | 93.8 ± 0.1 |
-| VisA | DINOv2 ViT-S/14 | 672 | **87.4 ± 1.5** | **89.7 ± 1.6** | **92.5 ± 1.1** | **93.8 ± 0.4** | **94.8 ± 0.2** |
-| VisA | DINOv3 ViT-S/16 | 512 | 82.9 ± 0.9 | 85.5 ± 0.5 | 87.4 ± 0.3 | 88.4 ± 0.0 | 89.2 ± 0.2 |
-| VisA | DINOv3 ViT-S/16 | 768 | 82.7 ± 0.8 | 85.2 ± 0.9 | 86.8 ± 0.1 | 87.9 ± 0.2 | 88.9 ± 0.2 |
+**MVTec-AD**
+
+| Backbone (res.) | 1-shot | 2-shot | 4-shot | 8-shot | 16-shot |
+|---|---|---|---|---|---|
+| DINOv2-S/14 (448) | 96.5 <sub>±0.5</sub> | 96.7 <sub>±1.0</sub> | 97.6 <sub>±0.1</sub> | 98.0 <sub>±0.1</sub> | 98.3 <sub>±0.1</sub> |
+| DINOv2-S/14 (672) | **96.6** <sub>±0.5</sub> | **96.9** <sub>±0.8</sub> | **97.7** <sub>±0.2</sub> | **98.2** <sub>±0.2</sub> | **98.4** <sub>±0.1</sub> |
+| DINOv3-S/16 (512) | 93.0 <sub>±1.1</sub> | 93.9 <sub>±1.2</sub> | 94.8 <sub>±0.3</sub> | 96.0 <sub>±0.6</sub> | 97.1 <sub>±0.3</sub> |
+| DINOv3-S/16 (768) | 92.2 <sub>±1.2</sub> | 93.4 <sub>±1.0</sub> | 94.5 <sub>±0.8</sub> | 95.8 <sub>±0.9</sub> | 97.1 <sub>±0.6</sub> |
+
+**VisA**
+
+| Backbone (res.) | 1-shot | 2-shot | 4-shot | 8-shot | 16-shot |
+|---|---|---|---|---|---|
+| DINOv2-S/14 (448) | 85.6 <sub>±1.8</sub> | 88.3 <sub>±2.1</sub> | 91.2 <sub>±0.9</sub> | 92.5 <sub>±0.1</sub> | 93.8 <sub>±0.1</sub> |
+| DINOv2-S/14 (672) | **87.4** <sub>±1.5</sub> | **89.7** <sub>±1.6</sub> | **92.5** <sub>±1.1</sub> | **93.8** <sub>±0.4</sub> | **94.8** <sub>±0.2</sub> |
+| DINOv3-S/16 (512) | 82.9 <sub>±0.9</sub> | 85.5 <sub>±0.5</sub> | 87.4 <sub>±0.3</sub> | 88.4 <sub>±0.0</sub> | 89.2 <sub>±0.2</sub> |
+| DINOv3-S/16 (768) | 82.7 <sub>±0.8</sub> | 85.2 <sub>±0.9</sub> | 86.8 <sub>±0.1</sub> | 87.9 <sub>±0.2</sub> | 88.9 <sub>±0.2</sub> |
 
 Resolutions are chosen so that both backbones see a comparable number of patch tokens per image (448/14 = 512/16 = 32 and 672/14 = 768/16 = 48 patches per side).
 Zero-shot masking is only applied for DINOv2 (not calibrated for DINOv3, helps mainly on VisA).
