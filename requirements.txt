@@ -1,14 +1,15 @@
 torch
 torchvision
-opencv-python
+opencv-python==4.11.0.86 # OpenCV 5 changes image rotation slightly -> results differ from the paper (4.10-4.14 are identical)
 matplotlib
 Pillow
-numpy==1.26 # numpy 2.0 not compatible at the moment
+numpy
 scipy
 scikit-learn
-faiss-gpu # or faiss-cpu
+faiss-gpu-cu12 # GPU similarity search (CUDA 12, Python 3.10-3.13), or faiss-cpu (use --faiss_on_cpu)
 tqdm
 tifffile
-argparse
 PyYAML
 pandas
+timm>=1.0.20 # only required for DINOv3
+pytest # for testing

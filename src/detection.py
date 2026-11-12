@@ -8,7 +8,7 @@ import tifffile as tiff
 import time
 import torch
 
-from src.utils import augment_image, dists2map, plot_ref_images
+from src.utils import augment_image, dists2map, plot_ref_images, list_images
 from src.post_eval import mean_top1p
 
 def run_anomaly_detection(
@@ -50,7 +50,7 @@ def run_anomaly_detection(
 
     assert knn_metric in ["L2", "L2_normalized"]
     
-    type_anomalies = object_anomalies[object_name]
+    type_anomalies = list(object_anomalies[object_name]) # copy, to not modify the dataset info
     # add 'good' to the anomaly types, if exists...
     good_folder = f"{data_root}/{object_name}/test/good/"
     if os.path.exists(good_folder):
@@ -58,23 +58,25 @@ def run_anomaly_detection(
     else:
         print(f"Warning: no 'good' test folder for {object_name} (expected to be at {good_folder})! Just running inference, no evaluation will be performed.")
 
-    # ensure that each type is only evaluated once
-    type_anomalies = list(set(type_anomalies))
+    # ensure that each type is only evaluated once (in a fixed order)
+    type_anomalies = sorted(set(type_anomalies))
 
     # Extract reference features
     features_ref = []
     images_ref = []
     masks_ref = []
-    vis_backgroud = []
+    vis_background = []
 
     img_ref_folder = f"{data_root}/{object_name}/train/good/"
     if n_ref_samples == -1:
         # full-shot setting
-        img_ref_samples = sorted(os.listdir(img_ref_folder))
+        img_ref_samples = list_images(img_ref_folder)
     else:
         # few-shot setting, pick samples in deterministic fashion according to seed
-        img_ref_samples = sorted(os.listdir(img_ref_folder))[seed*n_ref_samples:(seed + 1)*n_ref_samples]
+        img_ref_samples = list_images(img_ref_folder)[seed*n_ref_samples:(seed + 1)*n_ref_samples]
 
+    if len(img_ref_samples) == 0:
+        raise ValueError(f"No reference samples left for {object_name} (seed {seed}, {n_ref_samples}-shot) in {img_ref_folder}!")
     if len(img_ref_samples) < n_ref_samples:
         print(f"Warning: Not enough reference samples for {object_name}! Only {len(img_ref_samples)} samples available.")
     
@@ -103,21 +105,17 @@ def run_anomaly_detection(
                     images_ref.append(image_ref)
                     vis_image_background = model.get_embedding_visualization(features_ref_i, grid_size1, mask_ref)
                     masks_ref.append(mask_ref)
-                    vis_backgroud.append(vis_image_background)
+                    vis_background.append(vis_image_background)
         
         features_ref = np.concatenate(features_ref, axis=0).astype('float32')
 
-        # print(f"Number of reference patches for {object_name}: {features_ref.shape[0]}")
         if faiss_on_cpu:
-            # similariy search on CPU
+            # similarity search on CPU
             knn_index = faiss.IndexFlatL2(features_ref.shape[1])
         else:
-            # similariy search on GPU
+            # similarity search on GPU
             res = faiss.StandardGpuResources()
             knn_index = faiss.GpuIndexFlatL2(res, features_ref.shape[1])
-            # knn_index = faiss.IndexFlatL2(features_ref.shape[1])
-            # knn_index = faiss.index_cpu_to_gpu(res, int(model.device[-1]), knn_index)
-
 
         if knn_metric == "L2_normalized":
             faiss.normalize_L2(features_ref)
@@ -129,7 +127,7 @@ def run_anomaly_detection(
         # plot some reference samples for inspection
         if save_examples:
             plots_dir_ = f"{plots_dir}/{object_name}/"
-            plot_ref_images(images_ref, masks_ref, vis_backgroud, grid_size1, plots_dir_, title = "Reference Images", img_names = img_ref_samples)   
+            plot_ref_images(images_ref, masks_ref, vis_background, grid_size1, plots_dir_, title = "Reference Images", img_names = img_ref_samples)   
         
         inference_times = {}
         anomaly_scores = {}
@@ -142,7 +140,8 @@ def run_anomaly_detection(
             if save_patch_dists or save_tiffs:
                 os.makedirs(f"{plots_dir}/anomaly_maps/seed={seed}/{object_name}/test/{type_anomaly}", exist_ok=True)
             
-            for idx, img_test_nr in tqdm(enumerate(sorted(os.listdir(data_dir))), desc=f"Evaluating object_name'{type_anomaly}'", leave=False, total=len(os.listdir(data_dir))):
+            test_images = list_images(data_dir)
+            for idx, img_test_nr in tqdm(enumerate(test_images), desc=f"Evaluating {object_name} ({type_anomaly})", leave=False, total=len(test_images)):
                 # start measuring time (inference)
                 start_time = time.time()
                 image_test_path = f"{data_dir}/{img_test_nr}"
@@ -185,10 +184,11 @@ def run_anomaly_detection(
                 torch.cuda.synchronize() # Synchronize CUDA kernels before measuring time
                 inf_time = time.time() - start_time
                 inference_times[f"{type_anomaly}/{img_test_nr}"] = inf_time
-                anomaly_scores[f"{type_anomaly}/{img_test_nr}"] = mean_top1p(output_distances.flatten())
+                anomaly_score = mean_top1p(output_distances.flatten())
+                anomaly_scores[f"{type_anomaly}/{img_test_nr}"] = anomaly_score
 
                 # Save the anomaly maps (raw as .npy or full resolution .tiff files)
-                img_test_nr = img_test_nr.split(".")[0]
+                img_test_nr = os.path.splitext(img_test_nr)[0]
                 if save_tiffs:
                     anomaly_map = dists2map(d_masked, image_test.shape)
                     tiff.imwrite(f"{plots_dir}/anomaly_maps/seed={seed}/{object_name}/test/{type_anomaly}/{img_test_nr}.tiff", anomaly_map)
@@ -208,9 +208,8 @@ def run_anomaly_detection(
                     d_masked[~mask2.reshape(grid_size2)] = 0.0
                     plt.colorbar(ax3.imshow(d_masked), ax=ax3, fraction=0.12, pad=0.05, orientation="horizontal")
                     
-                    # compute image level anomaly score (mean(top 1%) of patches = empirical tail value at risk for quantile 0.99)
-                    score_top1p = mean_top1p(distances)
-                    ax4.axvline(score_top1p, color='r', linestyle='dashed', linewidth=1, label=f"Anomaly Score: {score_top1p:.3f}")
+                    # image level anomaly score (mean(top 1%) of patches = empirical tail value at risk for quantile 0.99)
+                    ax4.axvline(anomaly_score, color='r', linestyle='dashed', linewidth=1, label=f"Anomaly Score: {anomaly_score:.3f}")
                     ax4.legend()
                     ax4.hist(distances.flatten())
 

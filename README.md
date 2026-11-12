@@ -4,13 +4,16 @@
 
 This is the official code to reproduce the experiments in the paper [AnomalyDINO: Boosting Patch-based Few-shot Anomaly Detection with DINOv2](https://arxiv.org/abs/2405.14529), accepted at IEEE/CVF Winter Conference on Applications of Computer Vision (WACV 2025).
 
-## Prerequisits
+## Updates
+- **Nov 2026:** [DINOv3](https://github.com/facebookresearch/dinov3) backbones included (`--model_name dinov3_vits16`, also in the batched zero-shot script). With the default settings, DINOv2 seems to stay the better choice, see the [comparison below](#dinov2-vs-dinov3).
+
+## Prerequisites
 
 1. Create a virtual environment (e.g., `python -m venv .venvAnomalyDINO`), activate it (e.g., `source .venvAnomalyDINO/bin/activate`) and install the required dependencies for AnomalyDINO:
     ```shell
     pip install -r requirements.txt
     ```
-    Info: If you want to use `faiss` with GPU-acceleration we recommend setting up a conda environment with the required packages instead (only conda installation is supported, see, e.g., [here](https://github.com/facebookresearch/faiss/wiki/Installing-Faiss#why-dont-you-support-installing-via-xxx-)). To perform similarity search on CPU set the additional flag `--faiss_on_cpu`.
+    Info: The requirements install `faiss-gpu-cu12` for GPU-accelerated similarity search (CUDA 12, Python 3.10–3.13). Alternatively, `faiss-gpu` can be installed via conda (officially supported, see [here](https://github.com/facebookresearch/faiss/wiki/Installing-Faiss); note that the conda packages currently require `numpy<2`). To perform similarity search on CPU, install `faiss-cpu` instead and set the additional flag `--faiss_on_cpu`.
 
 2. Download and prepare the datasets [MVTec-AD](https://www.mvtec.com/company/research/datasets/mvtec-ad) and [VisA](https://github.com/amazon-science/spot-diff) from their official sources.
 For VisA, follow the instruction in the official repo to organize the data in the official 1-class splits. 
@@ -33,16 +36,17 @@ Alternatively, prepare your own dataset accordingly:
     │   ├── ...
     ```
 When no 'good' test set is available, just inference is performed (no evaluation of detection/segmentation metrics possible).
+For custom datasets (any `--dataset` name other than MVTec/VisA), test images can be in common image formats and ground truth masks are expected as `<image name>_mask.png` or `<image name>.png`. Without masks, detection metrics are still evaluated (segmentation requires masks).
 
 ## Usage
 
 ### Short Demo
-Get started with the minimal demo to perform few-shot anomaly detection (`demo_AD_DINO.ipynb`).
+Get started with the minimal demo to perform few-shot anomaly detection (`demo_AnomalyDINO.ipynb`).
 
 ### Few-shot anomaly detection
 
 For the full evaluation, run the script `run_anomalydino.py` on the selected dataset for a given number of shots and repetitions (seeds).
-The preprocessing to your dataset can be specified in `src/utils.py` in `get_dataset_info`, default is "agnostic" (apply masking whenever PCA-based masking works well & augment reference samples by rotations, see the paper).
+The preprocessing for your dataset can be specified in `src/utils.py` in `get_dataset_info`, default is "agnostic" (apply masking whenever PCA-based masking works well & augment reference samples by rotations, see the paper).
 
 The results for the default setting, i.e., all considered shots, three repetitions, and agnostic preprocessing, can be reproduced by calling:
 ```shell
@@ -58,12 +62,18 @@ For a faster inspection use, e.g.,
 python run_anomalydino.py --dataset MVTec --shots 1 --num_seeds 1 --preprocess informed --data_root data/mvtec_anomaly_detection
 ```
 
-The script automatically creates some example plots, plots some anomaly maps for each object, and automatically evaluates each run (activate evaluation of segementation with `--eval_segm` if applicable).
+The script automatically creates some example plots, plots some anomaly maps for each object, and automatically evaluates each run (activate evaluation of segmentation with `--eval_segm` if applicable).
 
 Evaluation results are saved in the respective results directory as `metrics_seed={seed}.json` for each seed.
 
+Other backbones can be selected with `--model_name`, e.g., `dinov2_vitb14` or DINOv3 (`dinov3_vits16`, `dinov3_vitb16`, `dinov3_vitl16`, ...; loaded via `timm`). 
+Note that zero-shot masking is only supported for DINOv2, for all other backbones masking is deactivated.
+By default, patch features are taken from the last transformer block (as in the paper), other layers can be selected with `--layer`.
 
-### Batched-Zero-Shot Anomay Detection
+### Tests
+Some quick sanity checks (no datasets, model downloads or GPU required) can be run with `pytest tests` (`pytest` is included in `requirements.txt`).
+
+### Batched-Zero-Shot Anomaly Detection
 To reproduce the results in the *batched* zero-shot scenario, run `run_anomalydino_batched.py` with appropriate arguments:
 
 ```shell
@@ -72,11 +82,33 @@ python run_anomalydino_batched.py --dataset MVTec --data_root data/mvtec_anomaly
 ```shell
 python run_anomalydino_batched.py --dataset VisA --data_root data/VisA_pytorch/1cls/
 ```
+Other backbones can be selected with `--model_name` (e.g., `dinov3_vits16`), the resolution with `--resolution`.
 
 ---
 
-This work uses the following ressources and datasets:
+### DINOv2 vs. DINOv3
+Image-level AUROC (%) with the default settings (agnostic preprocessing, last block), mean ± std over 3 seeds:
+
+| Dataset | Backbone | Resolution | 1-shot | 2-shot | 4-shot | 8-shot | 16-shot |
+|---|---|---|---|---|---|---|---|
+| MVTec-AD | DINOv2 ViT-S/14 | 448 | 96.5 ± 0.5 | 96.7 ± 1.0 | 97.6 ± 0.1 | 98.0 ± 0.1 | 98.3 ± 0.1 |
+| MVTec-AD | DINOv2 ViT-S/14 | 672 | **96.6 ± 0.5** | **96.9 ± 0.8** | **97.7 ± 0.2** | **98.2 ± 0.2** | **98.4 ± 0.1** |
+| MVTec-AD | DINOv3 ViT-S/16 | 512 | 93.0 ± 1.1 | 93.9 ± 1.2 | 94.8 ± 0.3 | 96.0 ± 0.6 | 97.1 ± 0.3 |
+| MVTec-AD | DINOv3 ViT-S/16 | 768 | 92.2 ± 1.2 | 93.4 ± 1.0 | 94.5 ± 0.8 | 95.8 ± 0.9 | 97.1 ± 0.6 |
+| VisA | DINOv2 ViT-S/14 | 448 | 85.6 ± 1.8 | 88.3 ± 2.1 | 91.2 ± 0.9 | 92.5 ± 0.1 | 93.8 ± 0.1 |
+| VisA | DINOv2 ViT-S/14 | 672 | **87.4 ± 1.5** | **89.7 ± 1.6** | **92.5 ± 1.1** | **93.8 ± 0.4** | **94.8 ± 0.2** |
+| VisA | DINOv3 ViT-S/16 | 512 | 82.9 ± 0.9 | 85.5 ± 0.5 | 87.4 ± 0.3 | 88.4 ± 0.0 | 89.2 ± 0.2 |
+| VisA | DINOv3 ViT-S/16 | 768 | 82.7 ± 0.8 | 85.2 ± 0.9 | 86.8 ± 0.1 | 87.9 ± 0.2 | 88.9 ± 0.2 |
+
+Resolutions are chosen so that both backbones see a comparable number of patch tokens per image (448/14 = 512/16 = 32 and 672/14 = 768/16 = 48 patches per side).
+Zero-shot masking is only applied for DINOv2 (not calibrated for DINOv3, helps mainly on VisA).
+Measured with updated dependencies (so numbers differ slightly from the paper results).
+
+---
+
+This work uses the following resources and datasets:
 - [DINOv2](https://github.com/facebookresearch/dinov2), code and model available under Apache 2.0 license.
+- [DINOv3](https://github.com/facebookresearch/dinov3) (optional backbone), code and model available under the DINOv3 License.
 - The [MVTec-AD dataset](https://www.mvtec.com/company/research/datasets/mvtec-ad), available under the CC BY-NC-SA 4.0 license.
 - The [VisA dataset](https://github.com/amazon-science/spot-diff), available under the CC BY 4.0 license.
 

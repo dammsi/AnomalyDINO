@@ -9,3 +9,7 @@ results*/
 *personal.ipynb
 feature_extraction.ipynb
 src/__pycache__/
+__pycache__/
+.ipynb_checkpoints/
+*.log
+log_*.txt

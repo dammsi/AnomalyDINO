@@ -1,33 +1,39 @@
-""""
-This evaluation scripts partly builds on the official evaluation script for MVTec-AD (original code available here: https://www.mvtec.com/company/research/datasets/mvtec-ad).
+"""
+This evaluation script partly builds on the official evaluation script for MVTec-AD (original code available here: https://www.mvtec.com/company/research/datasets/mvtec-ad).
 """
 
 import json
-from sklearn.metrics import auc, roc_auc_score, average_precision_score, f1_score, precision_recall_curve, pairwise
+from sklearn.metrics import roc_auc_score, average_precision_score, precision_recall_curve
 import numpy as np
 import os
-import numpy as np
 import cv2
 from os import makedirs, path, listdir
-import argparse
 from PIL import Image
 from tqdm import tqdm
 import tifffile as tiff
 from scipy.ndimage import label
 from bisect import bisect
 
-from src.utils import dists2map
+from src.utils import dists2map, IMAGE_EXTENSIONS
 
+
+def find_gt_file(gt_dir, name):
+    """Ground truth mask of a custom dataset: '<name>_mask.png' or '<name>.png' (returns the first candidate if none exists)."""
+    candidates = [path.join(gt_dir, name + '_mask.png'), path.join(gt_dir, name + '.png')]
+    return next((c for c in candidates if path.exists(c)), candidates[0])
 
 
 def parse_dataset_files(object_name, dataset_base_dir, anomaly_maps_dir, dataset="MVTec"):
-    """Parse the filenames for one object of the MVTec AD dataset.
+    """Parse the filenames for one object of the MVTec AD dataset (or of VisA / a custom dataset in MVTec format).
 
     Args:
         object_name: Name of the dataset object.
         dataset_base_dir: Base directory of the MVTec AD dataset.
         anomaly_maps_dir: Base directory where anomaly maps are located.
+        dataset: "MVTec", "VisA", or any other name for a custom dataset (any image format, ground truth masks named
+          '<name>_mask.png' or '<name>.png'; anomalous images without mask are still evaluated on image level).
     """
+    custom = dataset not in ("MVTec", "VisA")
     # Store a list of all ground truth filenames.
     gt_filenames = []
 
@@ -42,20 +48,27 @@ def parse_dataset_files(object_name, dataset_base_dir, anomaly_maps_dir, dataset
     # List all ground truth and corresponding anomaly images.
     for subdir in listdir(str(test_dir)):
 
-        if not subdir.replace('_', '').isalpha():
+        if custom:
+            if not path.isdir(path.join(test_dir, subdir)):
+                continue
+        elif not subdir.replace('_', '').isalpha():
             continue
 
         # Get paths to all test images in the dataset for this subdir.
         test_images = [path.splitext(file)[0]
                        for file
                        in listdir(path.join(test_dir, subdir))
-                       if path.splitext(file)[1] == ('.png' if dataset == "MVTec" else '.JPG')]
+                       if (path.splitext(file)[1].lower() in IMAGE_EXTENSIONS if custom
+                           else path.splitext(file)[1] == ('.png' if dataset == "MVTec" else '.JPG'))]
 
         # If subdir is not 'good', derive corresponding GT names.
         if subdir != 'good':
-            gt_filenames.extend(
-                [path.join(gt_base_dir, subdir, file + '_mask.png' if dataset == "MVTec" else file + '.png')
-                 for file in test_images])
+            if custom:
+                gt_filenames.extend([find_gt_file(path.join(gt_base_dir, subdir), file) for file in test_images])
+            else:
+                gt_filenames.extend(
+                    [path.join(gt_base_dir, subdir, file + '_mask.png' if dataset == "MVTec" else file + '.png')
+                     for file in test_images])
         else:
             # No ground truth maps exist for anomaly-free images.
             gt_filenames.extend([None] * len(test_images))
@@ -306,6 +319,11 @@ def eval_segmentation(gt_filenames, prediction_filenames, pro_integration_limit=
     ground_truth = []
     predictions = []
 
+    missing_gt = [g for g in gt_filenames if g is not None and not os.path.exists(g)]
+    if missing_gt:
+        raise FileNotFoundError(f"Segmentation evaluation requires ground truth masks for all anomalous test images, "
+                                f"{len(missing_gt)} missing (e.g., {missing_gt[0]}). Run without --eval_segm.")
+
     print("Read ground truth files and corresponding predictions...")
     for (gt_name, pred_name) in tqdm(zip(gt_filenames, prediction_filenames),
                                      total=len(gt_filenames)):
@@ -336,7 +354,7 @@ def eval_segmentation(gt_filenames, prediction_filenames, pro_integration_limit=
     auroc_px = roc_auc_score(ground_truth, predictions)
     print(f"AUROC (pixel-level): {auroc_px}", end=" -- ")
 
-    # # Compute pixel-level Average Precision (AP)
+    # Compute pixel-level F1 score (maximum over all thresholds)
     precisions, recalls, thresholds = precision_recall_curve(ground_truth, predictions)
     f1_scores = (2 * precisions * recalls) / (precisions + recalls)
     f1_px = np.max(f1_scores[np.isfinite(f1_scores)])
@@ -351,32 +369,45 @@ def eval_segmentation(gt_filenames, prediction_filenames, pro_integration_limit=
     return au_pro, auroc_px, f1_px
 
 
-def eval_classification(gt_filenames, prediction_filenames, aggregation_statistics = "meantop1p"):
+def eval_classification(gt_filenames, prediction_filenames, aggregation_statistics = "meantop1p", dataset_base_dir = None, dataset = "MVTec"):
     # Read all ground truth and anomaly images.
     ground_truth = []
     predictions = []
 
     gt_img_size = []
 
+    if aggregation_statistics == "max_anomaly_map" and dataset_base_dir is None:
+        raise ValueError("'dataset_base_dir' is required for aggregation_statistics='max_anomaly_map'.")
+
     print("Read ground truth files and corresponding predictions...")
     for (gt_name, pred_name) in tqdm(zip(gt_filenames, prediction_filenames),
                                      total=len(gt_filenames)):
-        prediction = np.load(pred_name + '.npy') 
+        prediction = np.load(pred_name + '.npy')
         predictions.append(prediction)
 
         if aggregation_statistics == "max_anomaly_map":
             # read in the test image to get the shape of the anomaly map
-            img = pred_name.split("/")[-4:]
-            # img = "data/mvtec_anomaly_detection/" + "/".join(img) + ".png"
-            img = "data/VisA_pytorch/1cls/" + "/".join(img) + ".JPG"
+            # (prediction path: <anomaly_maps_dir>/<object>/test/<anomaly_type>/<image name without extension>)
+            object_name, _, anomaly_type, img_name = path.normpath(pred_name).split(os.sep)[-4:]
+            img = path.join(dataset_base_dir, object_name, "test", anomaly_type, img_name)
+            if dataset in ("MVTec", "VisA"):
+                img += '.png' if dataset == "MVTec" else '.JPG'
+            else:  # custom dataset: any image format
+                extensions = IMAGE_EXTENSIONS + tuple(e.upper() for e in IMAGE_EXTENSIONS)
+                img = next((img + e for e in extensions if path.exists(img + e)), img)
             image_test = cv2.imread(img, cv2.IMREAD_GRAYSCALE)
-            gt_img_size.append(image_test.shape)        
+            if image_test is None:
+                raise FileNotFoundError(f"Could not read test image {img}")
+            gt_img_size.append(image_test.shape)
 
-        if gt_name is not None:
+        if gt_name is None:
+            ground_truth.append(np.zeros(prediction.shape))
+        elif path.exists(gt_name):
             ground_truth.append(np.asarray(Image.open(gt_name)))
         else:
-            ground_truth.append(np.zeros(prediction.shape))
-    
+            # anomalous test image without ground truth mask (custom datasets): anomalous according to its folder
+            ground_truth.append(np.ones(prediction.shape))
+
     # derive binary labels (0 = anomaly free, 1 = anomalous)
     binary_labels = [int(np.any(x > 0)) for x in ground_truth]
     del ground_truth
@@ -384,7 +415,7 @@ def eval_classification(gt_filenames, prediction_filenames, aggregation_statisti
     if aggregation_statistics == "meantop1p":
         predictions = [mean_top1p(dist.flatten()) for dist in predictions]
     elif aggregation_statistics == "max_anomaly_map":
-        predictions = [max_anomaly_map(dist.flatten(), img_size) for dist, img_size in zip(predictions, gt_img_size)]
+        predictions = [max_anomaly_map(dist, img_size) for dist, img_size in zip(predictions, gt_img_size)] # dist: 2D patch grid
     elif aggregation_statistics == "max_patch_distance":
         predictions = [np.max(dist.flatten()) for dist in predictions]
     else:
@@ -412,14 +443,17 @@ def get_objects_from_dataset(dataset):
         objects = ["bottle", "cable", "capsule", "carpet", "grid", "hazelnut", "leather", "metal_nut", "pill", "screw", "tile", "toothbrush", "transistor", "wood", "zipper"]
     elif dataset == "VisA":
         objects = ["candle", "capsules", "cashew", "chewinggum", "fryum", "macaroni1", "macaroni2", "pcb1", "pcb2", "pcb3", "pcb4", "pipe_fryum"]
+    else:
+        raise ValueError(f"Unknown dataset '{dataset}': pass the list of objects to evaluate (argument 'objects').")
     return objects
-    
 
-def eval_finished_run(dataset, dataset_base_dir, anomaly_maps_dir, output_dir, seed = None, pro_integration_limit = 0.3, eval_clf = True, eval_segm = False, delete_tiff_files = True, aggregation_statistics = "meantop1p"):
+
+def eval_finished_run(dataset, dataset_base_dir, anomaly_maps_dir, output_dir, seed = None, pro_integration_limit = 0.3, eval_clf = True, eval_segm = False, delete_tiff_files = True, aggregation_statistics = "meantop1p", objects = None):
     """
     Evaluate the results of a finished run on the MVTec AD dataset.
     Arguments:
-    - dataset: Name of the dataset to evaluate (either "MVTec" or "VisA").
+    - dataset: Name of the dataset to evaluate ("MVTec", "VisA", or a custom dataset in MVTec format).
+    - objects: Objects to evaluate (required for custom datasets, default: all objects of MVTec/VisA).
     - dataset_base_dir: Base directory of the MVTec AD dataset.
     - anomaly_maps_dir: Base directory where anomaly maps are located.
     - output_dir: Directory where to store the evaluation results.
@@ -431,7 +465,8 @@ def eval_finished_run(dataset, dataset_base_dir, anomaly_maps_dir, output_dir, s
     """
 
     # Parse the filenames of all ground truth and corresponding anomaly
-    objects = get_objects_from_dataset(dataset)
+    if objects is None:
+        objects = get_objects_from_dataset(dataset)
     # Store evaluation results in this dictionary.
     evaluation_dict = dict()
 
@@ -484,7 +519,9 @@ def eval_finished_run(dataset, dataset_base_dir, anomaly_maps_dir, output_dir, s
                 eval_classification(
                     gt_filenames,
                     prediction_filenames,
-                    aggregation_statistics = aggregation_statistics)
+                    aggregation_statistics = aggregation_statistics,
+                    dataset_base_dir = dataset_base_dir,
+                    dataset = dataset)
 
             evaluation_dict[obj]['classification_AUROC'] = auroc_clf
             evaluation_dict[obj]['classification_AP'] = ap_clf
